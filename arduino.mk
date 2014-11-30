@@ -332,7 +332,7 @@ upload: target
 	@test 0 -eq $(SERIALDEVGUESS) || { \
 		echo "*GUESSING* at serial device:" $(SERIALDEV); \
 		echo; }
-ifeq "$(BOARD_BOOTLOADER_PATH)" "caterina"
+ifeq (,$(findstring "caterina","$(BOARD_BOOTLOADER_PATH)"))
 	stty $(STTYFARG) $(SERIALDEV) speed 1200
 	sleep 1
 else
