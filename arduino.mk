@@ -131,6 +131,9 @@
 #              .ino (or .pde) is found, but it is not necessary to set it
 #              otherwise.
 #
+# CLEAN_ALSO   Extra files that also need to be removed whenever the "clean"
+#              goal is run.
+#
 # This makefile also defines the following goals for use on the command line
 # when you run make:
 #
@@ -341,6 +344,7 @@ endif
 	$(AVRDUDE) $(AVRDUDEFLAGS) -U flash:w:$(TARGET).hex:i
 
 clean:
+	rm -f $(CLEAN_ALSO)
 	rm -f $(OBJECTS)
 	rm -f $(TARGET).elf $(TARGET).hex $(ARDUINOLIB) *~
 	rm -rf .lib .dep
