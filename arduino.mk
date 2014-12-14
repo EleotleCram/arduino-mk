@@ -248,12 +248,21 @@ SOURCES += $(INOFILE) \
 	$(wildcard $(addprefix util/, *.c *.cc *.cpp *.C)) \
 	$(wildcard $(addprefix utility/, *.c *.cc *.cpp *.C))
 
+unique = $(shell ls $(patsubst ./%, %, $(1)) | sort -u)
+
+# automatically determine headers based on sources
+HEADERS := $(shell for file in $(SOURCES) ; do sed -ne "s%^ *\# *include *[\"]\(.*\)[\"]%$$(dirname $${file})/\1%p" $${file}; done)
+HEADERS := $(call unique, $(HEADERS))
+
+# automatically update sources based on headers
+SOURCES += $(patsubst ./%, %, $(wildcard $(addsuffix .c*, $(basename $(HEADERS)))))
+SOURCES := $(call unique, $(SOURCES))
+
 # automatically determine included libraries
 LIBRARIES := $(filter $(notdir $(wildcard $(addsuffix /*, $(LIBRARYPATH)))), \
 	$(shell sed -ne "s/^ *\# *include *[<\"]\(.*\)\.h[>\"]/\1/p" $(SOURCES)))
 
 endif
-
 # software
 findsoftware = $(firstword $(wildcard $(addsuffix /$(1), $(AVRTOOLSPATH))))
 CC := $(call findsoftware,avr-gcc)
@@ -321,7 +330,7 @@ endif
 #_______________________________________________________________________________
 #                                                                          RULES
 
-.PHONY:	all target upload clean boards monitor size bootloader
+.PHONY:	all target upload clean boards monitor size bootloader list-headers list-sources
 
 all: target
 
@@ -354,6 +363,12 @@ boards:
 	@sed -nEe '/^#/d; /^[^.]+\.name=/p' $(BOARDSFILE) | \
 		sed -Ee 's/([^.]+)\.name=(.*)/\1            \2/' \
 			-e 's/(.{12}) *(.*)/\1 \2/'
+
+list-headers:
+	@echo $(HEADERS)
+
+list-sources:
+	@echo $(SOURCES)
 
 monitor:
 	@test -n "$(SERIALDEV)" || { \
