@@ -415,27 +415,27 @@ $(TARGET).hex: $(TARGET).elf
 $(TARGET).elf: $(ARDUINOLIB) $(OBJECTS)
 	$(CC) $(LINKFLAGS) $(OBJECTS) $(ARDUINOLIB) -lm -o $@
 
-%.o: %.c
+%.o: %.c $(HEADERS)
 	mkdir -p .dep/$(dir $<)
 	$(COMPILE.c) $(CPPDEPFLAGS) -o $@ $<
 
-%.o: %.cpp
+%.o: %.cpp $(HEADERS)
 	mkdir -p .dep/$(dir $<)
 	$(COMPILE.cpp) $(CPPDEPFLAGS) -o $@ $<
 
-%.o: %.cc
+%.o: %.cc $(HEADERS)
 	mkdir -p .dep/$(dir $<)
 	$(COMPILE.cpp) $(CPPDEPFLAGS) -o $@ $<
 
-%.o: %.C
+%.o: %.C $(HEADERS)
 	mkdir -p .dep/$(dir $<)
 	$(COMPILE.cpp) $(CPPDEPFLAGS) -o $@ $<
 
-%.o: %.ino
+%.o: %.ino $(HEADERS)
 	mkdir -p .dep/$(dir $<)
 	$(COMPILE.cpp) $(CPPDEPFLAGS) -o $@ $(CPPINOFLAGS) $<
 
-%.o: %.pde
+%.o: %.pde $(HEADERS)
 	mkdir -p .dep/$(dir $<)
 	$(COMPILE.cpp) $(CPPDEPFLAGS) -o $@ $(CPPINOFLAGS) $<
 
