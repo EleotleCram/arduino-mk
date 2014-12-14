@@ -241,7 +241,7 @@ ifneq "$(words $(INOFILE))" "1"
 $(error There is more than one .pde or .ino file in this directory!)
 endif
 
-# automatically determine sources and targeet
+# automatically determine sources and target
 TARGET := $(basename $(INOFILE))
 SOURCES += $(INOFILE) \
 	$(wildcard *.c *.cc *.cpp *.C) \
