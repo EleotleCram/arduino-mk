@@ -168,8 +168,16 @@ ARDUINODIR := $(firstword $(wildcard ~/opt/arduino /usr/share/arduino \
 	/Applications/Arduino.app/Contents/Resources/Java \
 	$(HOME)/Applications/Arduino.app/Contents/Resources/Java))
 endif
-ifeq "$(wildcard $(ARDUINODIR)/hardware/arduino/boards.txt)" ""
+
+ifndef ARDUINODIR
 $(error ARDUINODIR is not set correctly; arduino software not found)
+endif
+
+ARDUINO_SEARCH_PATH := $(ARDUINODIR) ~/sketchbook
+
+BOARDS_FILES := "$(shell find $(ARDUINO_SEARCH_PATH) -name "boards.txt" 2> /dev/null)"
+ifeq "$(BOARDS_FILES)" ""
+$(error ARDUINODIR is not set correctly; no boards.txt found)
 endif
 
 # default arduino version
@@ -199,12 +207,44 @@ endif
 endif
 endif
 
+# create and normalize a temporary boards.txt
+TEMP_BOARDS_FILE := $(shell mktemp -t)
+
+define createNormalizedTempBoardsFile
+	BOARDS_TXT=$$(find $(ARDUINO_SEARCH_PATH) -name "boards.txt" 2> /dev/null | \
+	while read -r REPLY ; do \
+		boards_file="$${REPLY}" ; \
+		cat "$${boards_file}" | \
+			sed "/bootloader.path/{N;s^.*=\(.*\)\n\(.*\)=\(.*\)^\2=\1/\3^}" | \
+			sed "s^\(.*bootloader.file\)=\(.*\)^\1=$$(dirname $$(readlink -f $${boards_file}))/bootloaders/\2^" ; \
+		echo ; \
+	done) ; \
+	menuvariants="$$(echo "$${BOARDS_TXT}" | grep 'menu.cpu.[^.]*=')"; \
+	(echo "$${menuvariants}" | while read -r REPLY ; do \
+		rawmenuvariant="$${REPLY}"; \
+		menuvariant="$${rawmenuvariant%=*}"; \
+		processordescription="$${rawmenuvariant#*=}"; \
+		variant="$$(echo $${menuvariant} | sed 's/.menu.cpu./_/')"; \
+		echo '\n##############################################################\n' ; \
+		echo "$${BOARDS_TXT}" | \
+			grep "^$${menuvariant%%.*}\." | \
+			sed "s/$${menuvariant}/$${variant}/" | \
+			grep -v "\.menu\.cpu" | \
+			sed "s/$${menuvariant%%.*}\./$${variant}./;s/\(.*\.name=.*\)/\1 ($${processordescription})/"; \
+	done ; \
+	echo "$${BOARDS_TXT}" | \
+		grep -vE "($$(echo "$${menuvariants}" | awk -F. '{print $$1}' | sort -u | tr "\n" "|" | head -c -1))\." | \
+		grep -v '##[^#]') > $(TEMP_BOARDS_FILE)
+endef
+
+$(shell $(createNormalizedTempBoardsFile)) # Sort of a hack, because GNU Make cannot capture multiline string output from shell
+
 # obtain board parameters from the arduino boards.txt file
-BOARDSFILE := $(ARDUINODIR)/hardware/arduino/boards.txt
-readboardsparam = $(shell sed -ne "s/$(BOARD).$(1)=\(.*\)/\1/p" $(BOARDSFILE))
+readboardsparam = $(shell sed -ne "s/$(BOARD).$(1)=\(.*\)/\1/p" $(TEMP_BOARDS_FILE))
 BOARD_BUILD_MCU := $(call readboardsparam,build.mcu)
 BOARD_BUILD_FCPU := $(call readboardsparam,build.f_cpu)
 BOARD_BUILD_VARIANT := $(call readboardsparam,build.variant)
+BOARD_BUILD_VARIANT_DIR := $(wildcard $(addsuffix /$(BOARD_BUILD_VARIANT), $(shell find $(ARDUINO_SEARCH_PATH) -name "variants")))
 BOARD_UPLOAD_SPEED := $(call readboardsparam,upload.speed)
 BOARD_UPLOAD_PROTOCOL := $(call readboardsparam,upload.protocol)
 BOARD_USB_VID := $(call readboardsparam,build.vid)
@@ -214,8 +254,12 @@ BOARD_BOOTLOADER_LOCK := $(call readboardsparam,bootloader.lock_bits)
 BOARD_BOOTLOADER_LFUSES := $(call readboardsparam,bootloader.low_fuses)
 BOARD_BOOTLOADER_HFUSES := $(call readboardsparam,bootloader.high_fuses)
 BOARD_BOOTLOADER_EFUSES := $(call readboardsparam,bootloader.extended_fuses)
-BOARD_BOOTLOADER_PATH := $(call readboardsparam,bootloader.path)
 BOARD_BOOTLOADER_FILE := $(call readboardsparam,bootloader.file)
+
+ifneq "$(MAKECMDGOALS)" "boards"
+# Part two of the "multiline" workaround
+$(shell rm -f "$(TEMP_BOARDS_FILE)")
+endif
 
 # obtain preferences from the IDE's preferences.txt
 PREFERENCESFILE := $(firstword $(wildcard \
@@ -248,7 +292,7 @@ SOURCES += $(INOFILE) \
 	$(wildcard $(addprefix util/, *.c *.cc *.cpp *.C)) \
 	$(wildcard $(addprefix utility/, *.c *.cc *.cpp *.C))
 
-unique = $(shell ls $(patsubst ./%, %, $(1)) | sort -u)
+unique = $(shell echo $(patsubst ./%, %, $(1)) | tr " " "\n" | sort -u)
 
 # automatically determine headers based on sources
 HEADERS := $(shell for file in $(SOURCES) ; do sed -ne "s%^ *\# *include *[\"]\(.*\)[\"]%$$(dirname $${file})/\1%p" $${file}; done)
@@ -274,7 +318,7 @@ AVRDUDE := $(call findsoftware,avrdude)
 AVRSIZE := $(call findsoftware,avr-size)
 
 # directories
-ARDUINOCOREDIR := $(ARDUINODIR)/hardware/arduino/cores/arduino
+ARDUINOCOREDIR := $(ARDUINODIR)/hardware/arduino/avr/cores/arduino
 LIBRARYDIRS := $(foreach lib, $(LIBRARIES), \
 	$(firstword $(wildcard $(addsuffix /$(lib), $(LIBRARYPATH)))))
 LIBRARYDIRS += $(addsuffix /utility, $(LIBRARYDIRS))
@@ -286,9 +330,7 @@ DEPFILES := $(patsubst %, .dep/%.dep, $(SOURCES))
 ARDUINOLIB := .lib/arduino.a
 ARDUINOLIBOBJS := $(foreach dir, $(ARDUINOCOREDIR) $(LIBRARYDIRS), \
 	$(patsubst %, .lib/%.o, $(wildcard $(addprefix $(dir)/, *.c *.cpp))))
-BOOTLOADERHEX := $(addprefix \
-	$(ARDUINODIR)/hardware/arduino/bootloaders/$(BOARD_BOOTLOADER_PATH)/, \
-	$(BOARD_BOOTLOADER_FILE))
+BOOTLOADERHEX := $(BOARD_BOOTLOADER_FILE)
 
 # avrdude confifuration
 ifeq "$(AVRDUDECONF)" ""
@@ -306,7 +348,7 @@ CPPFLAGS += -mmcu=$(BOARD_BUILD_MCU)
 CPPFLAGS += -DF_CPU=$(BOARD_BUILD_FCPU) -DARDUINO=$(ARDUINOCONST)
 CPPFLAGS += -DUSB_VID=$(BOARD_USB_VID) -DUSB_PID=$(BOARD_USB_PID)
 CPPFLAGS += -I. -Iutil -Iutility -I $(ARDUINOCOREDIR)
-CPPFLAGS += -I $(ARDUINODIR)/hardware/arduino/variants/$(BOARD_BUILD_VARIANT)/
+CPPFLAGS += -I $(BOARD_BUILD_VARIANT_DIR)
 CPPFLAGS += $(addprefix -I , $(LIBRARYDIRS))
 CPPDEPFLAGS = -MMD -MP -MF .dep/$<.dep
 CPPINOFLAGS := -x c++ -include $(ARDUINOCOREDIR)/Arduino.h
@@ -344,7 +386,7 @@ upload: target
 	@test 0 -eq $(SERIALDEVGUESS) || { \
 		echo "*GUESSING* at serial device:" $(SERIALDEV); \
 		echo; }
-ifeq (,$(findstring "caterina","$(BOARD_BOOTLOADER_PATH)"))
+ifeq (,$(findstring "caterina","$(BOARD_BOOTLOADER_FILE)"))
 	stty $(STTYFARG) $(SERIALDEV) speed 1200
 	sleep 1
 else
@@ -360,9 +402,9 @@ clean:
 
 boards:
 	@echo "Available values for BOARD:"
-	@sed -nEe '/^#/d; /^[^.]+\.name=/p' $(BOARDSFILE) | \
-		sed -Ee 's/([^.]+)\.name=(.*)/\1            \2/' \
-			-e 's/(.{12}) *(.*)/\1 \2/'
+	@cat $(TEMP_BOARDS_FILE) | awk -F\[.=\] '/\.name/{printf "%-20s %s\n", $$1, $$3}'
+	@# Part three of the "multiline" workaround
+	@rm -f "$(TEMP_BOARDS_FILE)"
 
 list-headers:
 	@echo $(HEADERS)
