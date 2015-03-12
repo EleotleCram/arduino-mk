@@ -173,7 +173,7 @@ ifndef ARDUINODIR
 $(error ARDUINODIR is not set correctly; arduino software not found)
 endif
 
-ARDUINO_SEARCH_PATH := $(ARDUINODIR) ~/sketchbook
+ARDUINO_SEARCH_PATH := $(ARDUINODIR) ~/sketchbook ~/Arduino
 
 BOARDS_FILES := "$(shell find $(ARDUINO_SEARCH_PATH) -name "boards.txt" 2> /dev/null)"
 ifeq "$(BOARDS_FILES)" ""
@@ -188,7 +188,7 @@ AVRTOOLSPATH ?= $(subst :, , $(PATH)) $(ARDUINODIR)/hardware/tools \
 	$(ARDUINODIR)/hardware/tools/avr/bin
 
 # default path to find libraries
-LIBRARYPATH ?= libraries libs $(SKETCHBOOKDIR)/libraries $(ARDUINODIR)/libraries
+LIBRARYPATH ?= libraries libs $(SKETCHBOOKDIR)/libraries $(ARDUINODIR)/libraries ~/Arduino/libraries
 
 # default serial device to a poor guess (something that might be an arduino)
 SERIALDEVGUESS := 0
